@@ -1,7 +1,7 @@
 import json
 import os
 import numpy as np
-
+import torch
 class NumpyEncoder(json.JSONEncoder):
     """ Special json encoder for numpy types """
     def default(self, obj):
@@ -16,6 +16,8 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         elif isinstance(obj, bytes):
             return obj.decode('utf-8')
+        elif isinstance(obj, torch.Tensor): # Check if obj is a PyTorch tensor
+            return obj.tolist()         # Convert tensor to list
         return json.JSONEncoder.default(self, obj)
 
 def print_structure(d, indent=0):
