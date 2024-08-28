@@ -7,6 +7,18 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from shapely import geometry
 from shapely.geometry import  MultiPolygon
+left = 0.01
+width = 0.9
+bottom  = 0.01
+height = 0.9
+right = left + width
+top = bottom + height
+'''ax.text(0.5 * (left + right), 0.5 * (bottom + top), 'I am at the center',
+        horizontalalignment='center',
+        verticalalignment='center',
+        size= 12,
+        color='r',
+        transform=ax.transAxes)'''
 
 def retrive_json_object(path):
   with open(path, 'r') as f:
@@ -22,6 +34,7 @@ def plt_poly(polygon,shape):
   plt.ylim(0, shape[1])
   plt.xlim(0, shape[0])
   plt.show()
+  
 def get_multi_poly_fname(fname, pred_object,df_gt):
   classes = df_gt['Class Name'].unique()
   seg1_polylist =[]
@@ -72,26 +85,39 @@ def plt_multi_poly(polygon,shape):
   plt.ylim(0, shape[1])
   plt.xlim(0, shape[0])
   plt.show()
-def save_PR_plot(save_path:str,aP_df_50_2_95:dict,verbose:bool=False):
+
+def save_PR_plots(save_path:str,aP_df_50_2_95:dict,aP_50_2_95:dict, verbose:bool=False):
   plot_path = os.path.join(save_path,'plots')
   os.makedirs(plot_path, exist_ok=True)
   for ap in aP_df_50_2_95.keys():
     for ap_cls in aP_df_50_2_95[ap].keys():
       if verbose: print(f"Class- {ap_cls}, Average Precision- {ap}:")
       df_ap_graph = aP_df_50_2_95[ap][ap_cls]
+      auc = aP_50_2_95[ap][ap_cls]
       if df_ap_graph is None:
         if verbose: print(f"No data points to plot @{ap}:{ap_cls}\n")
-        continue
+        pass
       ax = plt.gca()
-      df_ap_graph.plot(kind='line',
+      try: 
+        df_ap_graph.plot(kind='line',
                 x='Recall_ap',
                 y='Precision_ap',
                 color='green', ax=ax)
+        
+      except:
+        plt.plot()
+        #plt.text(0, 0, f'Auc Score: {auc}', fontsize = 16,c='g')
+      ax.text(0.5 , 0.5, f'Auc Score: {auc}',
+              horizontalalignment='center',
+              verticalalignment='center',
+              size= 12,
+              color='g',
+              transform=ax.transAxes)
       plt.ylabel('Precision')
       plt.xlabel('Recall')
-      plt.title('PR curve for {} class with iou thrshold {}%'.format(ap_cls,ap))
+      plt.title('PR curve for {} class with iou threshold {}%'.format(ap_cls,ap))
       plt.savefig(os.path.join(plot_path,f"PR_curve_{ap}_{ap_cls}.jpg"))
-      if verbose: print("Saved as "+os.path.join(plot_path,f"PR_curve_{ap}_{ap_cls}.jpg\n"))
+      print("Saved as "+os.path.join(plot_path,f"PR_curve_{ap}_{ap_cls}.jpg"))
       plt.clf()
 
 def plot_kv_plot(save_path:str, dict_object:dict,title:str,x_label:str=None,y_label:str=None,show_maximum:bool=True,show_plot:bool=True):
@@ -166,9 +192,12 @@ def plot_segmentations_from_json(image_name:str,image_dir_path:str,
         label_x , label_y  = label_x+50,label_y+50
       image = cv2.polylines(image, [polygon_points], isClosed, gt_color, thickness)
       cv2.putText(image, obj['classname'], (label_x,label_y), cv2.FONT_HERSHEY_SIMPLEX, fontScale, gt_color,thickness)
+  cv2.putText(image, "Prediction", (50,50), cv2.FONT_HERSHEY_SIMPLEX, fontScale, pred_color,thickness)
+  cv2.putText(image, "Ground Truth", (50,100), cv2.FONT_HERSHEY_SIMPLEX, fontScale, gt_color,thickness)
   plt.title(f"Detection plot of {image_name}", fontdict = {'fontsize' : 10})
   plt.axis('off')
   plt.imshow(image)
+  
   if save_path: 
     plot_path = os.path.join(save_path,'plots')
     os.makedirs(plot_path, exist_ok=True)
