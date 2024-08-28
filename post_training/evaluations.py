@@ -89,7 +89,7 @@ def map_calculate_per_iou(pred_object,gt_object,classes,iou_threshold,conf_thres
       t_f =[]
       len_gt2 = []
       count_np = 0
-      sub_dict_gt = {id_item: dict_item for id_item,dict_item in test_dict[fname_label].items() if dict_item['classname'] == cls}
+      sub_dict_gt = {id_item: dict_item for id_item,dict_item in gt_object[fname_label].items() if dict_item['classname'] == cls}
       for id_pred in id_preds:
         if pred_object[fname_img][id_pred]['confidence'] < conf_threshold:  continue
         seg1 = pred_object[fname_img][id_pred]['segmentation']
@@ -244,5 +244,3 @@ def calculate_maP(df_ap_class, classes, iou_threshold,verbose:bool=False,warn_em
     print("The aP of the model ",aP)
     print("The maP of the model ",maP,'\n')
   return maP,aP,ap_df
-
-
