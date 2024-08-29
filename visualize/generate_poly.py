@@ -1,7 +1,8 @@
 from matplotlib import pyplot as plt
 import numpy as np
 from shapely import geometry
-from shapely.geometry import  MultiPolygon
+from shapely.geometry import  MultiPolygon,Polygon
+import random
 
 def generate_poly(segmentation_list):
   if type(segmentation_list) == str:
@@ -13,19 +14,29 @@ def generate_poly(segmentation_list):
   poly = geometry.Polygon(pointly)
   return geometry.Polygon(pointly)
 
-def generate_poly_from_list(segmentation_list):
-  if type(segmentation_list) == str:
-    segmentation_list = segmentation_list.replace('[','').replace(']','').split(',')
-    segmentaionlist3 = []
-    for p in range(0,len(segmentation_list),2):
-      segmentaionlist3.append([int(segmentation_list[p]),int(segmentation_list[p+1])])
-    segmentation_list =segmentaionlist3
-    if segmentation_list[0] != segmentation_list[-1]:
-      if (abs(segmentation_list[0][0]-segmentation_list[-1][0]) <=7 )&(abs(segmentation_list[0][1]-segmentation_list[-1][1]) <=7):
-        segmentation_list[-1] = segmentation_list[0]
-      else:
-        segmentation_list.append(segmentation_list[0])
-  return geometry.Polygon(segmentation_list)
+def generate_poly_from_list(segmentation_list: str | list) -> Polygon:
+  """Generates a Shapely Polygon object from a list of coordinates.
+
+  Args:
+      segmentation_list: A list of coordinates or a string representation of a list of coordinates.
+
+  Returns:
+      A Shapely Polygon object.
+  """
+
+  if isinstance(segmentation_list, str):
+    segmentation_list = segmentation_list.replace('[', '').replace(']', '').split(',')
+    segmentation_list = [[int(segmentation_list[p]), int(segmentation_list[p + 1])] for p in range(0, len(segmentation_list), 2)]
+
+  if isinstance(segmentation_list,np.ndarray):
+    segmentation_list = segmentation_list.tolist()
+  if segmentation_list[0] != segmentation_list[-1]:
+    if abs(segmentation_list[0][0] - segmentation_list[-1][0]) <= 7 and abs(segmentation_list[0][1] - segmentation_list[-1][1]) <= 7:
+      segmentation_list[-1] = segmentation_list[0]
+    else:
+      segmentation_list.append(segmentation_list[0])
+
+  return Polygon(segmentation_list)
 
 def plt_poly(polygon,shape):
   fig, ax = plt.subplots()
@@ -101,12 +112,12 @@ def get_multi_poly_fname_json(fname,classes, pred_object,gt_object):
   colors = ["#"+''.join([random.choice('0123456789ABCDEF') for j in range(6)])
              for i in range(number_of_colors)]  
   
-  for ki,obj in test_dict[FileName].items():
+  for ki,obj in gt_object[fname].items():
     polys_g.append(generate_poly_from_list(obj['segmentation']))
     colors_g.append(colors[classes.index(obj['classname'])])
     multiploy_obj_gt['poly']= polys_g
     multiploy_obj_gt['color']= colors_g
-  for ki,obj in pred_object[FileName].items():
+  for ki,obj in pred_object[fname].items():
     polys_p.append(generate_poly_from_list(obj['segmentation']))
     colors_p.append(colors[classes.index(obj['classname'])])
     multiploy_obj_pred['poly']= polys_p
