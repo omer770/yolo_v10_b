@@ -3,19 +3,8 @@ import copy
 import numpy as np
 import pandas as pd
 from shapely import geometry
-from sklearn.metrics import auc
-from matplotlib import pyplot as plt
-from shapely.geometry import Polygon
 from typing import List, Dict, Tuple, Any
-pd.options.mode.chained_assignment = None
-
-
-def get_classes(data_yaml:str):
-  import yaml
-  with open(data_yaml, 'r') as stream:
-    data = yaml.safe_load(stream)
-    classes = data['names']
-    return classes
+from shapely.geometry import Polygon, MultiPolygon
 
 def is_valid_segmentation(segmentation)->bool:
   """
@@ -68,179 +57,107 @@ def calculate_iou(seg1: List[float], seg2: List[float]) -> float:
     poly1 = generate_poly_from_list(seg1)
     poly2 = generate_poly_from_list(seg2)
     return poly1.intersection(poly2).area / poly1.union(poly2).area
-
-
-def map_calculate_per_iou(pred_object,gt_object,classes,iou_threshold,conf_threshold,verbose:bool=False):
-  tp_fp,len_gt,polygons1,polygons =[],[],[],[]
-  fname_labels = list(gt_object.keys())
-  FileName_list,Object_list,Confidence_list,TP_list,FP_list,Class_list = [],[],[],[],[],[]
-  df_ap_class = {}
-  for fname_label in fname_labels:
-    fname_img= fname_label.replace('.txt','.jpg')
-    count_gt_class = 0
-    if verbose:
-      print(f"File Name- {fname_img}, iou_threshold- {iou_threshold}")
-      print("-"*85)
-    if len(pred_object[fname_img])==0:continue
-    tp_fp_1, len_gt1 =[],[]
-    for cls in classes:
-      if verbose: print("Class- ",cls)
-      id_preds = list(pred_object[fname_img].keys())
-      t_f =[]
-      len_gt2 = []
-      count_np = 0
-      sub_dict_gt = {id_item: dict_item for id_item,dict_item in gt_object[fname_label].items() if dict_item['classname'] == cls}
-      for id_pred in id_preds:
-        if pred_object[fname_img][id_pred]['confidence'] < conf_threshold:  continue
-        seg1 = pred_object[fname_img][id_pred]['segmentation']
-        if pred_object[fname_img][id_pred]['classname'] != cls:
-          count_np+=1
-          continue
-        for id_gt in sub_dict_gt.keys():
-          seg2 = sub_dict_gt[id_gt]['segmentation']
-          try:iou = calculate_iou(seg1,seg2)
-          except:
-            polygons.append([generate_poly_from_list(seg1),generate_poly_from_list(seg2)])
-            iou = 0.1
-          if iou >= iou_threshold:
-            t_f.append(1)
-            FileName_list.append(fname_img)
-            Object_list.append(id_pred)
-            Confidence_list.append(pred_object[fname_img][id_pred]['confidence'])
-            Class_list.append(cls)
-            TP_list.append(1)
-            FP_list.append(0)
-            break
-          else:
-            if (id_gt==list(sub_dict_gt.keys())[-1]):
-              t_f.append(0)
-              FileName_list.append(fname_img)
-              Object_list.append(id_pred)
-              Confidence_list.append(pred_object[fname_img][id_pred]['confidence'])
-              TP_list.append(0)
-              FP_list.append(1)
-              Class_list.append(cls)
-              polygons1.append([generate_poly_from_list(seg1),generate_poly_from_list(seg2)])
-        len_gt2.append(len(sub_dict_gt))
-        if np.sum(t_f) == len(sub_dict_gt):break
-      if verbose: print("t_f, sum, len ",t_f,np.sum(t_f),len(t_f))
-      if len(t_f)!=0:
-        pre = (np.sum(t_f))/(len(t_f)) if (len(t_f))!= 0 else 0.0001
-        rec = (np.sum(t_f))/(len(sub_dict_gt)) if (len(sub_dict_gt))!=0 else 0.0001
-        if verbose:
-          print("len pred ",len(id_preds))
-          print(f"len of gt {len(sub_dict_gt)}\n")
-          print("Precision and Recall for class- ",cls,pre,rec)
-      tp_fp_1.append(t_f)
-      len_gt1.append(len(sub_dict_gt))
-      if verbose:
-        print("len pred ",len(id_preds)-count_np)
-        print(f"len of gt {len(sub_dict_gt)}\n")
-        print("-"*85)
-    tp_fp.append(tp_fp_1)
-    len_gt.append(len_gt1)
-  df_ap = pd.DataFrame(zip(FileName_list,Object_list,Confidence_list,Class_list,TP_list,FP_list),columns = ["Image","Detection", "Confidence", "Class","TP","FP"])
-  df_ap = df_ap.sort_values(by=['Confidence'],ascending=False)
-  for cls in classes:
-    df_ap_class[cls] = df_ap[df_ap['Class'] == cls]
-    df_apc = df_ap_class[cls]
-    df_apc = perform_pr_process(df_apc)
-
-  return tp_fp,len_gt,df_ap_class
-
-def overall_PR(tp_fp,len_gt,classes):
-  pc = 0
-  rc = 0
-  count = 0
-  print("-"*43)
-  count_ngt = 0
-  #classes = ['building','pool']
-  for c in [0,1]:
-    prc = 0
-    rcc = 0
-    count_ngt1 = 0
-    for i in range(len(len_gt)):
-      pri, rci = precision_recall_per_object(tp_fp,len_gt, i,c)
-      if (pri, rci)==(0.0001, 0.0001):
-        count_ngt1+=1
-      prc += pri
-      rcc += rci
-    #print("nt1",count_ngt1)
-    prcn = prc /(len(tp_fp)-count_ngt1)
-    rccn = prc /(len(len_gt)-count_ngt1)
-
-    count_ngt+=count_ngt1
-    print("precision for ",classes[c],prcn)
-    print("recall for ",classes[c],rccn)
-    print("-"*43)
-    pc+=prc
-    rc+=rcc
-  pc/=(len(tp_fp)*2-count_ngt)
-  rc/=(len(tp_fp)*2-count_ngt)
-  print("-"*43)
-  print("The overall precision is ",pc)
-  print("The overall recall is ",rc)
-  print("-"*43)
-  return None
-
-def precision_recall_per_object(tp_fp,len_gt, idr = 0,clas = 0):
-  #file_index
-  # 1 for pool, 0 for building
-  precision = (np.sum(tp_fp[idr][clas]))/(len(tp_fp[idr][clas])) if (len(tp_fp[idr][clas])) != 0 else 0.0001
-  recall = (np.sum(tp_fp[idr][clas]))/(len_gt[idr][clas]) if (len_gt[idr][clas]) != 0 else 0.0001
-  return precision,recall
-
-def perform_pr_process(df_apc):
-  Acc_TP = []
-  Acc_FP = []
-  Precision_ap = []
-  Recall_ap = []
-  count_acc_tp =  0
-  count_acc_fp = 0
-  #df_apc = df_apc.sort_values(by=['Confidence'])
-  len_gt_subclass = len(df_apc)
-  for row_T,row_F in df_apc.loc[:,["TP","FP"]].values:
-    count_acc_tp += row_T
-    count_acc_fp += row_F
-    Acc_TP.append(count_acc_tp)
-    Acc_FP.append(count_acc_fp)
-    presn = (count_acc_tp)/(count_acc_tp+count_acc_fp) if (count_acc_tp+count_acc_fp)!= 0 else 0
-    rcll = (count_acc_tp)/(len_gt_subclass) if len_gt_subclass!= 0 else 0
-    Precision_ap.append(presn)
-    Recall_ap.append(rcll)
-  df_apc["Acc_TP"] = np.array(Acc_TP)
-  df_apc["Acc_FP"] = np.array(Acc_FP)
-  df_apc["Precision_ap"] = np.array(Precision_ap)
-  df_apc["Recall_ap"] = np.array(Recall_ap)
-  df_apc["F1_score"] = 2 * ((df_apc["Precision_ap"] * df_apc["Recall_ap"]) / (df_apc["Precision_ap"] + df_apc["Recall_ap"]))
-  df_apc = df_apc.sort_values(by=['F1_score'],ascending=False)
-  df_apc = df_apc.reset_index(drop=True)
-  return df_apc
-
-def calculate_maP(df_ap_class, classes, iou_threshold,verbose:bool=False,warn_empty_class:bool = False):
+    
+def non_max_sup(pred_dict, conf_threshold, nms_threshold, verbose=False,return_dropped_objects:bool= False):
   """
-  This function calculates the maP score for a given IoU threshold.
+  Performs Non-Maximum Suppression (NMS) on detections, removing those with invalid geometries.
+
+  Args:
+      pred_object: A dictionary where keys are file names and values are dictionaries containing detections for that file.
+          Each detection dictionary should have 'confidence' (float), 'classname' (str), and 'segmentation' (data structure representing segmentation) keys.
+      threshold: Minimum confidence score to keep a detection.
+      nms_threshold: Intersection-over-Union (IOU) threshold for suppression.
+      verbose: (Optional) Boolean flag to enable verbose output. Defaults to False.
+
+  Returns:
+      A dictionary where keys are file names and values are lists of names of detections that were removed due to NMS or invalid geometry.
   """
-  aP = {}
-  maP = 0
-  ap_df = {}
-  count_zeros = 0
-  for cls in classes:
-    if cls in df_ap_class.keys():
-      df_ap_graph = df_ap_class[cls]
-      # Check if there are enough data points to calculate AUC
-      if df_ap_graph.shape[0] >= 2:
-        aP[cls] = round(auc(df_ap_graph['Recall_ap'],df_ap_graph['Precision_ap']),3)
-        ap_df[cls] = df_ap_graph.loc[:,['Recall_ap','Precision_ap']]
-      else:
-        if warn_empty_class: print(f"Warning: Not enough data points to calculate AUC for class {cls}")
-        aP[cls] = 0  # Or handle this case differently as needed
-        ap_df[cls] = None
-        count_zeros +=1
-  if aP:  # Check if aP dictionary is not empty
-    maP = round(sum(aP.values())/(len(aP)-count_zeros),3)
-  if verbose:
-    print("The iou threshold of the model ",iou_threshold)
-    print("The aP of the model ",aP)
-    print("The maP of the model ",maP,'\n')
-  return maP,aP,ap_df
+  pred_object = copy.deepcopy(pred_dict)
+  #dout = {k:v for k,v in pred_dict.items()}# Make a copy to avoid modifying the original dictionary
+  remove_dict = {}
+  for fname, detections in pred_object.items():
+    # Filter detections with invalid geometries
+    detections = {k: v for k, v in detections.items()}
+
+    # Sort detections by confidence (descending)
+    sorted_detections = sorted(detections.items(), key=lambda x: x[1]['confidence'], reverse=True)
+
+    # Keep only detections above the threshold
+    detections_to_keep = [detection for detection in sorted_detections if detection[1]['confidence'] >= conf_threshold]
+    removed_detections = [detection[0] for detection in sorted_detections if detection not in detections_to_keep]
+
+    # Perform NMS on remaining detections
+    for i, det_i in enumerate(detections_to_keep):
+      for j, det_j in enumerate(detections_to_keep[i + 1:]):
+        try: 
+          iou_nms = calculate_iou(det_i[1]['segmentation'], det_j[1]['segmentation'])
+          if iou_nms >= nms_threshold:
+            # Remove detection with lower confidence
+            removed_detections.append(det_j[0])
+            if verbose:print(f"\tFile - {fname}: Removed detection '{det_j[0]}' (iou: {iou_nms:.4f})")
+            try:
+              del pred_object[fname][det_j[0]]  # Remove detection from original dictionary
+            except KeyError:
+              pass  # Ignore if key already removed
+        except: 
+          removed_detections.append(det_j[0])
+          if verbose:print(f"\tFile - {fname}: Removed detection '{det_j[0]}' (iou: {iou_nms:.4f})")
+
+    # Update remove dictionary with names of removed detections
+    remove_dict[fname] = removed_detections
+    removed_dict = {k: v for k, v in remove_dict.items() if v}
+  if return_dropped_objects:
+    return pred_object,removed_dict
+  return pred_object
+
+
+def non_max_sup_old(pred_dict, conf_threshold, nms_threshold, verbose=False,return_dropped_objects:bool= False):
+  """
+  Performs Non-Maximum Suppression (NMS) on detections, removing those with invalid geometries.
+
+  Args:
+      pred_object: A dictionary where keys are file names and values are dictionaries containing detections for that file.
+          Each detection dictionary should have 'confidence' (float), 'classname' (str), and 'segmentation' (data structure representing segmentation) keys.
+      threshold: Minimum confidence score to keep a detection.
+      nms_threshold: Intersection-over-Union (IOU) threshold for suppression.
+      verbose: (Optional) Boolean flag to enable verbose output. Defaults to False.
+
+  Returns:
+      A dictionary where keys are file names and values are lists of names of detections that were removed due to NMS or invalid geometry.
+  """
+  pred_object = copy.deepcopy(pred_dict)
+  #dout = {k:v for k,v in pred_dict.items()}# Make a copy to avoid modifying the original dictionary
+  remove_dict = {}
+  for fname, detections in pred_object.items():
+    # Filter detections with invalid geometries
+    detections = {k: v for k, v in detections.items()}
+
+    # Sort detections by confidence (descending)
+    sorted_detections = sorted(detections.items(), key=lambda x: x[1]['confidence'], reverse=True)
+
+    # Keep only detections above the threshold
+    detections_to_keep = [detection for detection in sorted_detections if detection[1]['confidence'] >= conf_threshold]
+    removed_detections = [detection[0] for detection in sorted_detections if detection not in detections_to_keep]
+
+    # Perform NMS on remaining detections
+    for i, det_i in enumerate(detections_to_keep):
+      for j, det_j in enumerate(detections_to_keep[i + 1:]):
+        try: 
+          iou_nms = calculate_iou(det_i[1]['segmentation'], det_j[1]['segmentation'])
+          if iou_nms >= nms_threshold:
+            # Remove detection with lower confidence
+            removed_detections.append(det_j[0])
+          try:
+            del pred_object[fname][det_j[0]]  # Remove detection from original dictionary
+          except KeyError:
+            pass  # Ignore if key already removed
+          if verbose:
+            print(f"\tFile - {fname}: Removed detection '{det_j[0]}' (iou: {iou_nms:.4f})")
+        except: removed_detections.append(det_j[0])
+
+    # Update remove dictionary with names of removed detections
+    remove_dict[fname] = removed_detections
+    removed_dict = {k: v for k, v in remove_dict.items() if v}
+  if return_dropped_objects:
+    return pred_object,removed_dict
+  return pred_object
